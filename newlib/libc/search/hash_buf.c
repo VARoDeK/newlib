@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,11 +32,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/param.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 static char sccsid[] = "@(#)hash_buf.c	8.5 (Berkeley) 7/15/94";
 #endif /* LIBC_SCCS and not lint */
 #include <sys/cdefs.h>
+__FBSDID("$FreeBSD$");
 
 /*
  * PACKAGE: hash
@@ -61,6 +59,7 @@ static char sccsid[] = "@(#)hash_buf.c	8.5 (Berkeley) 7/15/94";
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef DEBUG
 #include <assert.h>
@@ -71,7 +70,7 @@ static char sccsid[] = "@(#)hash_buf.c	8.5 (Berkeley) 7/15/94";
 #include "page.h"
 #include "extern.h"
 
-static BUFHEAD *newbuf(HTAB *, __uint32_t, BUFHEAD *);
+static BUFHEAD *newbuf(HTAB *, u_int32_t, BUFHEAD *);
 
 /* Unlink B from its place in the lru */
 #define BUF_REMOVE(B) { \
@@ -93,14 +92,6 @@ static BUFHEAD *newbuf(HTAB *, __uint32_t, BUFHEAD *);
 #define MRU_INSERT(B)	BUF_INSERT((B), &hashp->bufhead)
 #define LRU_INSERT(B)	BUF_INSERT((B), LRU)
 
-/* Macros for min/max.  */
-#ifndef MIN
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#endif
-#ifndef MAX
-#define MAX(a,b) (((a)>(b))?(a):(b))
-#endif
-
 /*
  * We are looking for a buffer with address "addr".  If prev_bp is NULL, then
  * address is a bucket index.  If prev_bp is not NULL, then it points to the
@@ -110,17 +101,15 @@ static BUFHEAD *newbuf(HTAB *, __uint32_t, BUFHEAD *);
  * be valid.  Therefore, you must always verify that its address matches the
  * address you are seeking.
  */
-extern BUFHEAD *
-__get_buf(hashp, addr, prev_bp, newpage)
-	HTAB *hashp;
-	__uint32_t addr;
-	BUFHEAD *prev_bp;
-	int newpage;	/* If prev_bp set, indicates a new overflow page. */
+BUFHEAD *
+__get_buf(HTAB *hashp, u_int32_t addr,
+    BUFHEAD *prev_bp,	/* If prev_bp set, indicates a new overflow page. */
+    int newpage)
 {
 	BUFHEAD *bp;
-	__uint32_t is_disk_mask;
-	int is_disk, segment_ndx = 0;
-	SEGMENT segp = NULL;
+	u_int32_t is_disk_mask;
+	int is_disk, segment_ndx;
+	SEGMENT segp;
 
 	is_disk = 0;
 	is_disk_mask = 0;
@@ -151,7 +140,7 @@ __get_buf(hashp, addr, prev_bp, newpage)
 			return (NULL);
 		if (!prev_bp)
 			segp[segment_ndx] =
-			    (BUFHEAD *)((ptrdiff_t)bp | (intptr_t)is_disk_mask);
+			    (BUFHEAD *)((intptr_t)bp | is_disk_mask);
 	} else {
 		BUF_REMOVE(bp);
 		MRU_INSERT(bp);
@@ -166,38 +155,49 @@ __get_buf(hashp, addr, prev_bp, newpage)
  * If newbuf finds an error (returning NULL), it also sets errno.
  */
 static BUFHEAD *
-newbuf(hashp, addr, prev_bp)
-	HTAB *hashp;
-	__uint32_t addr;
-	BUFHEAD *prev_bp;
+newbuf(HTAB *hashp, u_int32_t addr, BUFHEAD *prev_bp)
 {
 	BUFHEAD *bp;		/* The buffer we're going to use */
 	BUFHEAD *xbp;		/* Temp pointer */
 	BUFHEAD *next_xbp;
 	SEGMENT segp;
 	int segment_ndx;
-	__uint16_t oaddr, *shortp;
+	u_int16_t oaddr, *shortp;
 
 	oaddr = 0;
 	bp = LRU;
+
+        /* It is bad to overwrite the page under the cursor. */
+        if (bp == hashp->cpage) {
+                BUF_REMOVE(bp);
+                MRU_INSERT(bp);
+                bp = LRU;
+        }
+
+	/* If prev_bp is part of bp overflow, create a new buffer. */
+	if (hashp->nbufs == 0 && prev_bp && bp->ovfl) {
+		BUFHEAD *ovfl;
+
+		for (ovfl = bp->ovfl; ovfl ; ovfl = ovfl->ovfl) {
+			if (ovfl == prev_bp) {
+				hashp->nbufs++;
+				break;
+			}
+		}
+	}
+
 	/*
 	 * If LRU buffer is pinned, the buffer pool is too small. We need to
 	 * allocate more buffers.
 	 */
-	if (hashp->nbufs || (bp->flags & BUF_PIN)) {
+	if (hashp->nbufs || (bp->flags & BUF_PIN) || bp == hashp->cpage) {
 		/* Allocate a new one */
-		if ((bp = (BUFHEAD *)malloc(sizeof(BUFHEAD))) == NULL)
+		if ((bp = (BUFHEAD *)calloc(1, sizeof(BUFHEAD))) == NULL)
 			return (NULL);
-#ifdef PURIFY
-		memset(bp, 0xff, sizeof(BUFHEAD));
-#endif
-		if ((bp->page = (char *)malloc(hashp->BSIZE)) == NULL) {
+		if ((bp->page = (char *)calloc(1, hashp->BSIZE)) == NULL) {
 			free(bp);
 			return (NULL);
 		}
-#ifdef PURIFY
-		memset(bp->page, 0xff, hashp->BSIZE);
-#endif
 		if (hashp->nbufs)
 			hashp->nbufs--;
 	} else {
@@ -212,7 +212,7 @@ newbuf(hashp, addr, prev_bp)
 			 * Set oaddr before __put_page so that you get it
 			 * before bytes are swapped.
 			 */
-			shortp = (__uint16_t *)bp->page;
+			shortp = (u_int16_t *)bp->page;
 			if (shortp[0])
 				oaddr = shortp[shortp[0] - 1];
 			if ((bp->flags & BUF_MOD) && __put_page(hashp, bp->page,
@@ -247,7 +247,7 @@ newbuf(hashp, addr, prev_bp)
 			 */
 			for (xbp = bp; xbp->ovfl;) {
 				next_xbp = xbp->ovfl;
-				xbp->ovfl = 0;
+				xbp->ovfl = NULL;
 				xbp = next_xbp;
 
 				/* Check that ovfl pointer is up date. */
@@ -255,7 +255,7 @@ newbuf(hashp, addr, prev_bp)
 				    (oaddr != xbp->addr))
 					break;
 
-				shortp = (__uint16_t *)xbp->page;
+				shortp = (u_int16_t *)xbp->page;
 				if (shortp[0])
 					/* set before __put_page */
 					oaddr = shortp[shortp[0] - 1];
@@ -284,7 +284,7 @@ newbuf(hashp, addr, prev_bp)
 		 */
 #ifdef DEBUG1
 		(void)fprintf(stderr, "NEWBUF2: %d->ovfl was %d is now %d\n",
-		    prev_bp->addr, (prev_bp->ovfl ? bp->ovfl->addr : 0),
+		    prev_bp->addr, (prev_bp->ovfl ? prev_bp->ovfl->addr : 0),
 		    (bp ? bp->addr : 0));
 #endif
 		prev_bp->ovfl = bp;
@@ -295,10 +295,8 @@ newbuf(hashp, addr, prev_bp)
 	return (bp);
 }
 
-extern void
-__buf_init(hashp, nbytes)
-	HTAB *hashp;
-	int nbytes;
+void
+__buf_init(HTAB *hashp, int nbytes)
 {
 	BUFHEAD *bfp;
 	int npages;
@@ -320,10 +318,8 @@ __buf_init(hashp, nbytes)
 	 */
 }
 
-extern int
-__buf_free(hashp, do_free, to_disk)
-	HTAB *hashp;
-	int do_free, to_disk;
+int
+__buf_free(HTAB *hashp, int do_free, int to_disk)
 {
 	BUFHEAD *bp;
 
@@ -340,8 +336,10 @@ __buf_free(hashp, do_free, to_disk)
 		}
 		/* Check if we are freeing stuff */
 		if (do_free) {
-			if (bp->page)
+			if (bp->page) {
+				(void)memset(bp->page, 0, hashp->BSIZE);
 				free(bp->page);
+			}
 			BUF_REMOVE(bp);
 			free(bp);
 			bp = LRU;
@@ -351,12 +349,10 @@ __buf_free(hashp, do_free, to_disk)
 	return (0);
 }
 
-extern void
-__reclaim_buf(hashp, bp)
-	HTAB *hashp;
-	BUFHEAD *bp;
+void
+__reclaim_buf(HTAB *hashp, BUFHEAD *bp)
 {
-	bp->ovfl = 0;
+	bp->ovfl = NULL;
 	bp->addr = 0;
 	bp->flags = 0;
 	BUF_REMOVE(bp);

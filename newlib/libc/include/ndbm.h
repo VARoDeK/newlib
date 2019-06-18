@@ -1,7 +1,7 @@
 /*-
  * SPDX-License-Identifier: BSD-3-Clause
  *
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -31,61 +31,56 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)page.h	8.2 (Berkeley) 5/31/94
+ *	@(#)ndbm.h	8.1 (Berkeley) 6/2/93
  * $FreeBSD$
  */
 
-/*
- * Definitions for hashing page file format.
- */
+#ifndef _NDBM_H_
+#define	_NDBM_H_
+
+#ifndef __DBINTERFACE_PRIVATE
+#define __DBINTERFACE_PRIVATE
+#endif
+
+#include <db_local.h>
+
+/* Map dbm interface onto db(3). */
+#define DBM_RDONLY	O_RDONLY
+
+/* Flags to dbm_store(). */
+#define DBM_INSERT      0
+#define DBM_REPLACE     1
 
 /*
- * routines dealing with a data page
- *
- * page format:
- *	+------------------------------+
- * p	| n | keyoff | datoff | keyoff |
- * 	+------------+--------+--------+
- *	| datoff | free  |  ptr  | --> |
- *	+--------+---------------------+
- *	|	 F R E E A R E A       |
- *	+--------------+---------------+
- *	|  <---- - - - | data	       |
- *	+--------+-----+----+----------+
- *	|  key   | data     | key      |
- *	+--------+----------+----------+
- *
- * Pointer to the free space is always:  p[p[0] + 2]
- * Amount of free space on the page is:  p[p[0] + 1]
+ * The db(3) support for ndbm always appends this suffix to the
+ * file name to avoid overwriting the user's original database.
  */
-
-/*
- * How many bytes required for this pair?
- *	2 shorts in the table at the top of the page + room for the
- *	key and room for the data
- *
- * We prohibit entering a pair on a page unless there is also room to append
- * an overflow page. The reason for this it that you can get in a situation
- * where a single key/data pair fits on a page, but you can't append an
- * overflow page and later you'd have to split the key/data and handle like
- * a big pair.
- * You might as well do this up front.
- */
-
-#define	PAIRSIZE(K,D)	(2*sizeof(u_int16_t) + (K)->size + (D)->size)
-#define BIGOVERHEAD	(4*sizeof(u_int16_t))
-#define KEYSIZE(K)	(4*sizeof(u_int16_t) + (K)->size);
-#define OVFLSIZE	(2*sizeof(u_int16_t))
-#define FREESPACE(P)	((P)[(P)[0]+1])
-#define	OFFSET(P)	((P)[(P)[0]+2])
-#define PAIRFITS(P,K,D) \
-	(((P)[2] >= REAL_KEY) && \
-	    (PAIRSIZE((K),(D)) + OVFLSIZE) <= FREESPACE((P)))
-#define PAGE_META(N)	(((N)+3) * sizeof(u_int16_t))
+#define	DBM_SUFFIX	".db"
 
 typedef struct {
-	BUFHEAD *newp;
-	BUFHEAD *oldp;
-	BUFHEAD *nextp;
-	u_int16_t next_addr;
-}       SPLIT_RETURN;
+	void *dptr;
+	int dsize;	/* XXX Should be size_t according to 1003.1-2008. */
+} datum;
+
+typedef DB DBM;
+#define	dbm_pagfno(a)	DBM_PAGFNO_NOT_AVAILABLE
+
+__BEGIN_DECLS
+int	 dbm_clearerr(DBM *);
+void	 dbm_close(DBM *);
+int	 dbm_delete(DBM *, datum);
+int	 dbm_error(DBM *);
+datum	 dbm_fetch(DBM *, datum);
+datum	 dbm_firstkey(DBM *);
+#if __BSD_VISIBLE
+long	 dbm_forder(DBM *, datum);
+#endif
+datum	 dbm_nextkey(DBM *);
+DBM	*dbm_open(const char *, int, mode_t);
+int	 dbm_store(DBM *, datum, datum, int);
+#if __BSD_VISIBLE
+int	 dbm_dirfno(DBM *);
+#endif
+__END_DECLS
+
+#endif /* !_NDBM_H_ */

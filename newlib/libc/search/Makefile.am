@@ -2,13 +2,14 @@
 
 AUTOMAKE_OPTIONS = cygnus
 
-INCLUDES = $(NEWLIB_CFLAGS) $(CROSS_CFLAGS) $(TARGET_CFLAGS)
+INCLUDES = -I$(srcdir)/../posix $(NEWLIB_CFLAGS) $(CROSS_CFLAGS) $(TARGET_CFLAGS)
 
 GENERAL_SOURCES = \
 	bsearch.c \
 	db_local.h \
 	extern.h \
 	hash.h \
+	ndbm.c \
 	page.h \
 	qsort.c
 
@@ -25,6 +26,7 @@ ELIX_2_SOURCES = \
 	hash_page.c \
 	hcreate.c \
 	hcreate_r.c \
+	hsearch_r.c
 	tdelete.c \
 	tdestroy.c \
 	tfind.c \

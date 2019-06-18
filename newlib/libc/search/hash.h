@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,27 +32,8 @@
  * SUCH DAMAGE.
  *
  *	@(#)hash.h	8.3 (Berkeley) 5/31/94
- * $FreeBSD: src/lib/libc/db/hash/hash.h,v 1.6 2002/03/21 22:46:26 obrien Exp $
+ * $FreeBSD$
  */
-
-#include <sys/param.h>
-#define __need_size_t
-#include <stddef.h>
-#include <stdint.h>
-
-/* Check that newlib understands the byte order of its target system.  */
-#ifndef BYTE_ORDER
-#error BYTE_ORDER not defined by sys/param.h
-#endif
-
-/* Define DB endianness constants based on target endianness.  */
-#define DB_LITTLE_ENDIAN 1234
-#define DB_BIG_ENDIAN 4321
-#if (BYTE_ORDER == LITTLE_ENDIAN)
-#define DB_BYTE_ORDER DB_LITTLE_ENDIAN
-#else
-#define DB_BYTE_ORDER DB_BIG_ENDIAN
-#endif
 
 /* Operations */
 typedef enum {
@@ -68,7 +47,7 @@ struct _bufhead {
 	BUFHEAD		*prev;		/* LRU links */
 	BUFHEAD		*next;		/* LRU links */
 	BUFHEAD		*ovfl;		/* Overflow page buffer header */
-	__uint32_t	 addr;		/* Address of this page */
+	u_int32_t	 addr;		/* Address of this page */
 	char		*page;		/* Actual page data */
 	char	 	flags;
 #define	BUF_MOD		0x0001
@@ -85,27 +64,27 @@ typedef BUFHEAD **SEGMENT;
 typedef struct hashhdr {		/* Disk resident portion */
 	int32_t		magic;		/* Magic NO for hash tables */
 	int32_t		version;	/* Version ID */
-	__uint32_t	lorder;		/* Byte Order */
+	u_int32_t	lorder;		/* Byte Order */
 	int32_t		bsize;		/* Bucket/Page Size */
 	int32_t		bshift;		/* Bucket shift */
 	int32_t		dsize;		/* Directory Size */
 	int32_t		ssize;		/* Segment Size */
 	int32_t		sshift;		/* Segment shift */
-	int32_t		ovfl_point;	/* Where overflow pages are being
+	int32_t		ovfl_point;	/* Where overflow pages are being 
 					 * allocated */
 	int32_t		last_freed;	/* Last overflow page freed */
-	int32_t		max_bucket;	/* ID of Maximum bucket in use */
-	int32_t		high_mask;	/* Mask to modulo into entire table */
-	int32_t		low_mask;	/* Mask to modulo into lower half of
+	u_int32_t	max_bucket;	/* ID of Maximum bucket in use */
+	u_int32_t	high_mask;	/* Mask to modulo into entire table */
+	u_int32_t	low_mask;	/* Mask to modulo into lower half of 
 					 * table */
-	int32_t		ffactor;	/* Fill factor */
+	u_int32_t	ffactor;	/* Fill factor */
 	int32_t		nkeys;		/* Number of keys in hash table */
 	int32_t		hdrpages;	/* Size of table header */
 	int32_t		h_charkey;	/* value of hash(CHARKEY) */
 #define NCACHED	32			/* number of bit maps and spare 
 					 * points */
 	int32_t		spares[NCACHED];/* spare pages for overflow */
-	__uint16_t	bitmaps[NCACHED];	/* address of overflow page 
+	u_int16_t	bitmaps[NCACHED];	/* address of overflow page 
 						 * bitmaps */
 } HASHHDR;
 
@@ -114,14 +93,14 @@ typedef struct htab	 {		/* Memory resident data structure */
 	int		nsegs;		/* Number of allocated segments */
 	int		exsegs;		/* Number of extra allocated 
 					 * segments */
-	__uint32_t			/* Hash function */
+	u_int32_t			/* Hash function */
 	    (*hash)(const void *, size_t);
 	int		flags;		/* Flag values */
 	int		fp;		/* File pointer */
 	char		*tmp_buf;	/* Temporary Buffer for BIG data */
 	char		*tmp_key;	/* Temporary Buffer for BIG keys */
 	BUFHEAD 	*cpage;		/* Current page */
-	int32_t		cbucket;	/* Current bucket */
+	int		cbucket;	/* Current bucket */
 	int		cndx;		/* Index of next item on cpage */
 	int		error;		/* Error Number -- for DBM 
 					 * compatibility */
@@ -130,7 +109,7 @@ typedef struct htab	 {		/* Memory resident data structure */
 	int		save_file;	/* Indicates whether we need to flush 
 					 * file at
 					 * exit */
-	__uint32_t	*mapp[NCACHED];	/* Pointers to page maps */
+	u_int32_t	*mapp[NCACHED];	/* Pointers to page maps */
 	int		nmaps;		/* Initial number of bitmaps */
 	int		nbufs;		/* Number of buffers left to 
 					 * allocate */
@@ -141,18 +120,10 @@ typedef struct htab	 {		/* Memory resident data structure */
 /*
  * Constants
  */
-#if INT_MAX == 32767
-#define	MAX_BSIZE		4096
-#else
-#define	MAX_BSIZE		65536		/* 2^16 */
-#endif
+#define	MAX_BSIZE		32768		/* 2^15 but should be 65536 */
 #define MIN_BUFFERS		6
 #define MINHDRSIZE		512
-#if INT_MAX == 32767
-#define DEF_BUFSIZE		4096
-#else
 #define DEF_BUFSIZE		65536		/* 64 K */
-#endif
 #define DEF_BUCKET_SIZE		4096
 #define DEF_BUCKET_SHIFT	12		/* log2(BUCKET) */
 #define DEF_SEGSIZE		256
@@ -166,14 +137,14 @@ typedef struct htab	 {		/* Memory resident data structure */
 #define BYTE_SHIFT		3
 #define INT_TO_BYTE		2
 #define INT_BYTE_SHIFT		5
-#define ALL_SET			((__uint32_t)0xFFFFFFFF)
+#define ALL_SET			((u_int32_t)0xFFFFFFFF)
 #define ALL_CLEAR		0
 
-#define PTROF(X)	((BUFHEAD *)((ptrdiff_t)(X)&~0x3))
-#define ISMOD(X)	((__uint32_t)(ptrdiff_t)(X)&0x1)
-#define DOMOD(X)	((X) = (char *)((ptrdiff_t)(X)|0x1))
-#define ISDISK(X)	((__uint32_t)(ptrdiff_t)(X)&0x2)
-#define DODISK(X)	((X) = (char *)((ptrdiff_t)(X)|0x2))
+#define PTROF(X)	((BUFHEAD *)((intptr_t)(X)&~0x3))
+#define ISMOD(X)	((u_int32_t)(intptr_t)(X)&0x1)
+#define DOMOD(X)	((X) = (char *)((intptr_t)(X)|0x1))
+#define ISDISK(X)	((u_int32_t)(intptr_t)(X)&0x2)
+#define DODISK(X)	((X) = (char *)((intptr_t)(X)|0x2))
 
 #define BITS_PER_MAP	32
 
@@ -193,9 +164,9 @@ typedef struct htab	 {		/* Memory resident data structure */
 
 #define SPLITSHIFT	11
 #define SPLITMASK	0x7FF
-#define SPLITNUM(N)	(((__uint32_t)(N)) >> SPLITSHIFT)
+#define SPLITNUM(N)	(((u_int32_t)(N)) >> SPLITSHIFT)
 #define OPAGENUM(N)	((N) & SPLITMASK)
-#define	OADDR_OF(S,O)	((__uint32_t)((__uint32_t)(S) << SPLITSHIFT) + (O))
+#define	OADDR_OF(S,O)	((u_int32_t)((u_int32_t)(S) << SPLITSHIFT) + (O))
 
 #define BUCKET_TO_PAGE(B) \
 	(B) + hashp->HDRPAGES + ((B) ? hashp->SPARES[__log2((B)+1)-1] : 0)
@@ -315,7 +286,7 @@ typedef struct htab	 {		/* Memory resident data structure */
 #define HDRPAGES	hdr.hdrpages
 #define SPARES		hdr.spares
 #define BITMAPS		hdr.bitmaps
-#define HASH_VERSION	hdr.version
+#define VERSION		hdr.version
 #define MAGIC		hdr.magic
 #define NEXT_FREE	hdr.next_free
 #define H_CHARKEY	hdr.h_charkey

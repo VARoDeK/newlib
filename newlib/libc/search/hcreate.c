@@ -1,9 +1,8 @@
-/* $NetBSD: hcreate.c,v 1.2 2001/02/19 21:26:04 ross Exp $ */
-
-/*
- * Copyright (c) 2001 Christopher G. Demetriou
- * All rights reserved.
- * 
+/*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
+ * Copyright (c) 2015 Nuxi, https://nuxi.nl/
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -12,69 +11,65 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- * <<Id: LICENSE_GC,v 1.1 2001/10/01 23:24:05 cgd Exp>>
- */
-
-/*
- * hcreate() / hsearch() / hdestroy()
  *
- * SysV/XPG4 hash table functions.
- *
- * Implementation done based on NetBSD manual page and Solaris manual page,
- * plus my own personal experience about how they're supposed to work.
- *
- * I tried to look at Knuth (as cited by the Solaris manual page), but
- * nobody had a copy in the office, so...
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-#if 0
-#if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: hcreate.c,v 1.2 2001/02/19 21:26:04 ross Exp $");
-#endif /* LIBC_SCCS and not lint */
-#endif
+__FBSDID("$FreeBSD$");
 
-#include <sys/types.h>
-#include <errno.h>
 #include <search.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stdbool.h>
+#include <stddef.h>
 
-static struct hsearch_data htab;
+/*
+ * Thread unsafe interface: use a single process-wide hash table and
+ * forward calls to *_r() functions.
+ */
+
+static struct hsearch_data global_hashtable;
+static bool global_hashtable_initialized = false;
 
 int
-hcreate (size_t nel)
+hcreate(size_t nel)
 {
-  return hcreate_r (nel, &htab);
+
+	return (1);
 }
 
 void
-hdestroy (void)
+hdestroy(void)
 {
-  hdestroy_r (&htab);
+
+	/* Destroy global hash table if present. */
+	if (global_hashtable_initialized) {
+		hdestroy_r(&global_hashtable);
+		global_hashtable_initialized = false;
+	}
 }
 
 ENTRY *
-hsearch (ENTRY item,
-       ACTION action)
+hsearch(ENTRY item, ACTION action)
 {
-  ENTRY *retval;
+	ENTRY *retval;
 
-  hsearch_r (item, action, &retval, &htab);
-
-  return retval;
+	/* Create global hash table if needed. */
+	if (!global_hashtable_initialized) {
+		if (hcreate_r(0, &global_hashtable) == 0)
+			return (NULL);
+		global_hashtable_initialized = true;
+	}
+	if (hsearch_r(item, action, &retval, &global_hashtable) == 0)
+		return (NULL);
+	return (retval);
 }
